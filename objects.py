@@ -11,13 +11,21 @@ star_positions = []
 
 def init_resources():
     """ Memuat semua resource (texture & setup quadric) """
+    
+    global nebula_tex
+    nebula_tex = load_texture("nebula.jpg")
+
     global quadric
     quadric = gluNewQuadric()
     gluQuadricTexture(quadric, GL_TRUE)
+
     
     # Load textures
-    texture_files = ["sun.jpg", "mercury.jpg", "venus.jpg", "earth.jpg", "mars.jpg",
-                     "jupiter.jpg", "saturn.jpg", "uranus.jpg", "neptune.jpg"]
+    texture_files = [
+        "sun.jpg", "mercury.jpg", "venus.jpg", "earth.jpg", "mars.jpg",
+        "jupiter.jpg", "saturn.jpg", "uranus.jpg", "neptune.jpg", "moon.jpg",
+        "deimos.jpg", "phobos.jpg", "io.jpg", "europa.jpg", "nebula.jpg"
+    ]
     
     print("Loading Textures...")
     for f in texture_files:
@@ -31,16 +39,76 @@ def init_resources():
         star_positions.append((x, y, z))
 
 def draw_stars():
-    """ Menggambar latar belakang bintang sederhana """
+    """ Menggambar bintang dengan ukuran & kecerahan acak """
     glDisable(GL_LIGHTING)
-    glPointSize(1.5)
-    glColor3f(1, 1, 1)
-    glBegin(GL_POINTS)
+    glEnable(GL_POINT_SMOOTH)
+    glPointSize(1.0)
+    
+    # Randomize color & size per star
     for pos in star_positions:
+        size = random.uniform(1.0, 3.0)
+        brightness = random.uniform(0.7, 1.0)
+        glColor3f(brightness, brightness, brightness)
+        glPointSize(size)
+        
+        glBegin(GL_POINTS)
         glVertex3fv(pos)
-    glEnd()
+        glEnd()
+    
+    glDisable(GL_POINT_SMOOTH)
     glEnable(GL_LIGHTING)
 
+def draw_nebula():
+    """ Menggambar nebula sebagai background statis yang imersif """
+    if 'nebula.jpg' not in textures or not textures['nebula.jpg']:
+        return
+
+    # 1. Setup State: Matikan Depth Testing sementara agar nebula selalu di belakang
+    glDisable(GL_LIGHTING)
+    glDisable(GL_DEPTH_TEST)
+    glDepthMask(GL_FALSE)  # Mengunci buffer kedalaman
+    
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
+    # 2. Masuk ke mode Ortho (2D Projecton)
+    glMatrixMode(GL_PROJECTION)
+    glPushMatrix()
+    glLoadIdentity()
+    gluOrtho2D(-1, 1, -1, 1)
+
+    glMatrixMode(GL_MODELVIEW)
+    glPushMatrix()
+    glLoadIdentity()
+
+    # 3. Gambar Quad Nebula
+    glEnable(GL_TEXTURE_2D)
+    glBindTexture(GL_TEXTURE_2D, textures['nebula.jpg'])
+    
+    # Berikan sedikit opacity (0.4 - 0.6) agar tidak terlalu terang menutupi bintang
+    # glColor4f(1.0, 1.0, 1.0, 0.5)
+    glColor4f(0.8, 0.2, 0.8, 0.3)
+    
+    glBegin(GL_QUADS)
+    glTexCoord2f(0, 0); glVertex2f(-1, -1)
+    glTexCoord2f(1, 0); glVertex2f(1, -1)
+    glTexCoord2f(1, 1); glVertex2f(1, 1)
+    glTexCoord2f(0, 1); glVertex2f(-1, 1)
+    glEnd()
+
+    # 4. Cleanup & Kembalikan State
+    glDisable(GL_TEXTURE_2D)
+    glDisable(GL_BLEND)
+    
+    glPopMatrix() # Pop Modelview
+    glMatrixMode(GL_PROJECTION)
+    glPopMatrix() # Pop Projection
+    
+    glMatrixMode(GL_MODELVIEW)
+    glDepthMask(GL_TRUE)  # Buka kembali kunci buffer kedalaman
+    glEnable(GL_DEPTH_TEST)
+    glEnable(GL_LIGHTING)
+    
 def draw_sphere(radius, texture_name):
     """ Menggambar planet/matahari dengan tekstur """
     if texture_name in textures and textures[texture_name]:
@@ -67,6 +135,26 @@ def draw_orbit(r):
         z = r * math.sin(theta)
         glVertex3f(x, 0, z)
     glEnd()
+    glEnable(GL_LIGHTING)
+
+def draw_saturn_rings(inner_radius=1.8, outer_radius=3.0):
+    """ Menggambar cincin Saturnus sebagai disk datar transparan """
+    glDisable(GL_LIGHTING)
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    glColor4f(0.7, 0.65, 0.5, 0.7)  # Warna kecoklatan transparan
+
+    glBegin(GL_QUAD_STRIP)
+    segments = 64
+    for i in range(segments + 1):
+        angle = 2.0 * math.pi * i / segments
+        x = math.cos(angle)
+        z = math.sin(angle)
+        glVertex3f(x * outer_radius, 0.0, z * outer_radius)
+        glVertex3f(x * inner_radius, 0.0, z * inner_radius)
+    glEnd()
+
+    glDisable(GL_BLEND)
     glEnable(GL_LIGHTING)
 
 def draw_selection_ring(r):
@@ -180,6 +268,38 @@ def draw_hud_panel(x, y, w, h, title=""):
     glEnd()
     glLineWidth(1)
 
+def draw_moon(radius, texture_name):
+    """ Menggambar satelit (bulan) dengan ukuran kecil """
+    if texture_name in textures and textures[texture_name]:
+        glEnable(GL_TEXTURE_2D)
+        glBindTexture(GL_TEXTURE_2D, textures[texture_name])
+        glColor3f(1, 1, 1)
+    else:
+        glDisable(GL_TEXTURE_2D)
+        glColor3f(0.6, 0.6, 0.6)  # Abu-abu jika tidak ada tekstur
+        
+    gluSphere(quadric, radius, 20, 20)  # Resolusi lebih rendah karena kecil
+    glDisable(GL_TEXTURE_2D)
+
+def draw_background():
+    """ Menggambar gradien langit malam + nebula tipis """
+    glDisable(GL_LIGHTING)
+    glDisable(GL_DEPTH_TEST)
+    glDisable(GL_TEXTURE_2D)
+
+    # Gradien biru tua → ungu → hitam
+    glBegin(GL_QUADS)
+    glColor3f(0.02, 0.02, 0.08)  # Biru tua
+    glVertex2f(-1, -1)
+    glVertex2f(1, -1)
+    glColor3f(0.01, 0.01, 0.04)  # Ungu tua
+    glVertex2f(1, 1)
+    glVertex2f(-1, 1)
+    glEnd()
+
+    glEnable(GL_DEPTH_TEST)
+    glEnable(GL_LIGHTING)
+
 def draw_3d_planet_preview(x, y, w, h, texture_name, angle):
     """
     MENGGAMBAR PLANET 3D ASLI DI DALAM HUD 2D.
@@ -245,3 +365,4 @@ def draw_3d_planet_preview(x, y, w, h, texture_name, angle):
     glVertex2f(x, y+h)
     glEnd()
     glLineWidth(1)
+

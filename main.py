@@ -64,116 +64,149 @@ def project_planet_pos(x, y, z):
 def display():
     global angle, hovered_planet
 
+    # 1. Clear Buffers
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+    
+    # 2. Render Background Layer (Tanpa Depth Buffer)
+    # Urutan: Nebula -> Gradient Background -> Stars
+    draw_nebula()
+    draw_background()
+    draw_stars()  # Aktifkan kembali bintangnya
+    
+    glDisable(GL_BLEND)
+    
+    # 3. Setup Kamera 3D
     glLoadIdentity()
     camera()
     
-    draw_stars()
+    # 4. Render Matahari (Pusat Cahaya)
+    glPushMatrix()
+    glDisable(GL_LIGHTING) # Matahari tidak butuh lighting karena dia sumbernya
+    glRotatef(angle * 5, 0, 1, 0) # Matahari berputar pelan
     draw_sphere(2.5, "sun.jpg")
+    if 'draw_sun_glow' in globals(): draw_sun_glow() # Panggil jika ada di objects.py
+    glEnable(GL_LIGHTING)
+    glPopMatrix()
+
+    # Posisikan lampu tepat di tengah matahari (0,0,0)
+    glLightfv(GL_LIGHT0, GL_POSITION, [0, 0, 0, 1])
 
     hovered_planet = None
     
+    # 5. Render Planet dan Satelit
     for p in PLANETS:
         draw_orbit(p["distance"])
         
         glPushMatrix()
         
-        # Rotasi Orbit
+        # Posisi Orbit
         curr_angle = angle * p["speed"]
         px = math.cos(curr_angle) * p["distance"]
         pz = math.sin(curr_angle) * p["distance"]
-        
         glTranslatef(px, 0, pz)
-        glRotatef(angle * 20, 0, 1, 0)
 
-        draw_sphere(p["radius"], p["texture"])
+        # Simpan state untuk planet agar rotasi sendiri tidak mempengaruhi bulan
+        glPushMatrix()
+        glRotatef(angle * 20, 0, 1, 0)
         
-        # Deteksi Mouse
+        # Tambahkan efek Atmosfer (Visual upgrade)
+        if p["name"] == "Earth" and 'draw_atmosphere' in globals():
+            draw_atmosphere(p["radius"], (0.3, 0.5, 1.0))
+            
+        draw_sphere(p["radius"], p["texture"])
+        glPopMatrix()
+
+        # Render Satelit (Bulan)
+        if "moons" in p and p["moons"]:
+            for moon in p["moons"]:
+                glPushMatrix()
+                moon_angle = angle * moon["speed"]
+                mx = math.cos(moon_angle) * moon["distance"]
+                mz = math.sin(moon_angle) * moon["distance"]
+                glTranslatef(mx, 0, mz)
+                glRotatef(angle * 10, 0, 1, 0)
+                draw_sphere(moon["radius"], moon["texture"])
+                glPopMatrix()
+
+        # Spesial: Cincin Saturnus
+        if p["name"].lower() == "saturn":
+            glPushMatrix()
+            glRotatef(20, 1, 0, 0) # Miringkan cincin sedikit agar estetik
+            draw_saturn_rings(
+                inner_radius=p["radius"] * 1.4,
+                outer_radius=p["radius"] * 2.2
+            )
+            glPopMatrix()
+        
+        # Deteksi Mouse (Hover)
         screen_x, screen_y = project_planet_pos(0, 0, 0)
         dist = math.hypot(screen_x - mouseX, screen_y - mouseY)
         
         if dist < 25: 
             hovered_planet = p
-            glRotatef(-angle * 20, 0, 1, 0) 
-            glRotatef(45, 1, 0, 0) 
+            # Selection ring diputar agar horizontal terhadap planet
+            glPushMatrix()
+            glRotatef(90, 1, 0, 0)
             draw_selection_ring(p["radius"])
+            glPopMatrix()
 
         glPopMatrix()
 
     if not paused:
         angle += 0.01 * speed_scale 
 
-    # ================= UI / HUD LAYER =================
+    # 6. Render UI / HUD Layer (2D)
     begin_2d(WIDTH, HEIGHT)
 
-    # --- 1. COMMAND CENTER ---
-    panel_guide_w = 320
-    panel_guide_h = 130
-    guide_x = 20
-    guide_y = 20
+    # --- Panel Guide ---
+    draw_hud_panel(15, 20, 350, 120, "")
+    draw_text(30, 100, "MISSION CONTROL", (0, 1, 1), GLUT_BITMAP_HELVETICA_18)
+    draw_text(30, 75, "[W A S D] : Fly Navigation", (0.9, 0.9, 0.9), GLUT_BITMAP_9_BY_15)
+    draw_text(30, 55, "[Q / E]   : Altitude Up/Down", (0.9, 0.9, 0.9), GLUT_BITMAP_9_BY_15)
+    draw_text(30, 35, "[Mouse]   : Look Around (Middle)", (0.9, 0.9, 0.9), GLUT_BITMAP_9_BY_15)
     
-    draw_hud_panel(guide_x, guide_y, panel_guide_w, panel_guide_h, "")
-    
-    draw_text(guide_x + 15, guide_y + 100, "MISSION CONTROL", (0, 1, 1), GLUT_BITMAP_HELVETICA_18)
-    draw_text(guide_x + 15, guide_y + 75, "[W A S D] : Fly Navigation", (0.9, 0.9, 0.9), GLUT_BITMAP_9_BY_15)
-    draw_text(guide_x + 15, guide_y + 55, "[Q / E]   : Altitude Up/Down", (0.9, 0.9, 0.9), GLUT_BITMAP_9_BY_15)
-    draw_text(guide_x + 15, guide_y + 35, "[Mouse]   : Look Around (Middle Btn)", (0.9, 0.9, 0.9), GLUT_BITMAP_9_BY_15)
-    
-    # --- 2. STATUS ---
+    # --- Status System ---
     speed_text = f"SPEED: {speed_scale:.1f}x"
     color_speed = (0, 1, 0) if not paused else (1, 0, 0)
-    status_text = "PAUSED" if paused else "ACTIVE"
-    
-    # PERBAIKAN: Geser sedikit ke kiri agar tidak terlalu mepet pinggir
     status_x = WIDTH - 220
-    draw_text(status_x, 60, f"SYSTEM: {status_text}", color_speed, GLUT_BITMAP_9_BY_15)
+    draw_text(status_x, 60, f"SYSTEM: {'PAUSED' if paused else 'ACTIVE'}", color_speed, GLUT_BITMAP_9_BY_15)
     draw_text(status_x, 40, "[SPACE] : Toggle Pause", (0.7, 0.7, 0.7), GLUT_BITMAP_9_BY_15)
     draw_text(status_x, 20, f"[+ / -] : {speed_text}", (1, 1, 0), GLUT_BITMAP_9_BY_15)
 
+    # Label Hover
     if hovered_planet and not selected_planet:
         draw_text(mouseX + 15, HEIGHT - mouseY - 5, hovered_planet['name'], (1, 1, 0))
 
-    # --- 3. POPUP INFO PLANET (LAYOUT DIPERBAIKI) ---
+    # --- Popup Info Planet ---
     if selected_planet:
-        # PERBAIKAN: Panel diperbesar tingginya menjadi 320 agar muat semua elemen tanpa tumpang tindih
         panel_w, panel_h = 450, 320 
-        panel_x = (WIDTH - panel_w) // 2
-        panel_y = (HEIGHT - panel_h) // 2
+        panel_x, panel_y = (WIDTH - panel_w) // 2, (HEIGHT - panel_h) // 2
         
         draw_hud_panel(panel_x, panel_y, panel_w, panel_h, selected_planet["name"])
         
-        # --- PREVIEW PLANET 3D ---
+        # Planet Preview 3D
         preview_size = 130 
-        padding_left = 30
-        # PERBAIKAN: Posisi vertikal dinaikkan agar ada ruang untuk deskripsi di bawahnya
-        preview_x = panel_x + padding_left
-        # Bottom dari image ada di y + 140 (relatif terhadap panel_y)
-        preview_y = panel_y + panel_h - preview_size - 50 
-        
+        preview_x = panel_x + 30
+        preview_y = panel_y + panel_h - preview_size - 60 
         draw_3d_planet_preview(preview_x, preview_y, preview_size, preview_size, 
                                selected_planet["texture"], angle * 0.5)
 
-        # Info Text (Di sebelah kanan planet 3D)
+        # Stats
         text_x = panel_x + preview_size + 50
-        start_y = panel_y + panel_h - 60
-        
+        start_y = panel_y + panel_h - 75
         draw_text(text_x, start_y, f"Radius   : {selected_planet['radius']} units", (0.7, 1.0, 1.0), GLUT_BITMAP_9_BY_15)
         draw_text(text_x, start_y - 25, f"Distance : {selected_planet['distance']} M km", (0.7, 1.0, 1.0), GLUT_BITMAP_9_BY_15)
         draw_text(text_x, start_y - 50, f"Speed    : {selected_planet['speed']} km/s", (0.7, 1.0, 1.0), GLUT_BITMAP_9_BY_15)
         
-        # Garis Separator (Di bawah area gambar)
-        separator_y = panel_y + 125
-        glColor4f(1, 1, 1, 0.3)
+        # Line & Description
+        separator_y = panel_y + 120
+        glColor4f(1, 1, 1, 0.2)
         glBegin(GL_LINES)
-        glVertex2f(panel_x + 30, separator_y)
-        glVertex2f(panel_x + panel_w - 30, separator_y)
+        glVertex2f(panel_x + 30, separator_y); glVertex2f(panel_x + panel_w - 30, separator_y)
         glEnd()
         
-        # Deskripsi (Di bawah garis separator, aman dari tabrakan gambar)
-        desc_y = separator_y - 25
-        draw_text_wrapped(panel_x + 30, desc_y, selected_planet["info"], panel_w - 60)
-        
-        draw_text(panel_x + 30, panel_y + 15, "[ESC] Close Data Stream", (1, 0.5, 0.5), GLUT_BITMAP_9_BY_15)
+        draw_text_wrapped(panel_x + 30, separator_y - 25, selected_planet["info"], panel_w - 60)
+        draw_text(panel_x + 30, panel_y + 15, "[ESC] Close Data Stream", (1, 0.4, 0.4), GLUT_BITMAP_9_BY_15)
 
     end_2d()
     glutSwapBuffers()

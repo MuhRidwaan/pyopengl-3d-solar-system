@@ -4,19 +4,28 @@ def setup_lighting():
     glEnable(GL_LIGHTING)
     glEnable(GL_LIGHT0)
     
-    # Material agar objek bereaksi terhadap cahaya tapi tetap mempertahankan warna tekstur
+    # Memastikan tekstur tetap terlihat jelas di bawah pencahayaan
     glEnable(GL_COLOR_MATERIAL)
     glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE)
 
-    # Posisi cahaya (Matahari ada di 0,0,0)
-    # 4th parameter 1.0 berarti Positional Light (bukan Directional)
+    # Posisi cahaya di tengah Matahari (0,0,0)
     glLightfv(GL_LIGHT0, GL_POSITION, [0.0, 0.0, 0.0, 1.0])
     
-    # Ambient: Cahaya dasar redup agar sisi gelap tidak hitam total
-    glLightfv(GL_LIGHT0, GL_AMBIENT, [0.1, 0.1, 0.1, 1.0])
+    # 1. AMBIENT: Dibuat sedikit kebiruan agar sisi gelap planet 
+    # terkesan memantulkan cahaya dari nebula/latar belakang.
+    glLightfv(GL_LIGHT0, GL_AMBIENT, [0.05, 0.05, 0.1, 1.0])
     
-    # Diffuse: Warna cahaya matahari (Putih Terang)
-    glLightfv(GL_LIGHT0, GL_DIFFUSE, [1.2, 1.2, 1.2, 1.0])
+    # 2. DIFFUSE: Cahaya matahari dibuat sedikit hangat (warna krem/putih gading) 
+    # agar tidak terlalu "flat" putihnya.
+    # glLightfv(GL_LIGHT0, GL_DIFFUSE, [1.3, 1.25, 1.1, 1.0])
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, [1.5, 1.5, 1.5, 1.0])
     
-    # Specular: Kilau pada planet
-    glLightfv(GL_LIGHT0, GL_SPECULAR, [0.5, 0.5, 0.5, 1.0])
+    # 3. SPECULAR: Memberikan efek pantulan cahaya pada permukaan planet yang licin (seperti air di Bumi)
+    # glLightfv(GL_LIGHT0, GL_SPECULAR, [0.8, 0.8, 0.8, 1.0])
+    glLightfv(GL_LIGHT0, GL_AMBIENT, [0.02, 0.02, 0.05, 1.0])
+
+    # 4. ATTENUATION (Opsional): Membuat cahaya meredup secara alami sesuai jarak
+    # Semakin jauh planet, semakin redup cahayanya.
+    glLightf(GL_LIGHT0, GL_CONSTANT_ATTENUATION, 1.0)
+    glLightf(GL_LIGHT0, GL_LINEAR_ATTENUATION, 0.005)
+    glLightf(GL_LIGHT0, GL_QUADRATIC_ATTENUATION, 0.0001)
